@@ -1,0 +1,11 @@
+# RSA toolbox :
+    - Encryption and decryption
+    - Switch for function calling with args
+    - Wrong inputs protection
+
+# ECC :
+    - Everything
+
+# GPT :
+    - Wrong inputs protection
+    - Test

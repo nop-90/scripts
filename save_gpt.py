@@ -41,7 +41,7 @@ def restore_disk(file, dev):
     print("Are you sure (Y or N) ?")
     choice = input()
 
-    if choice = "Y" or choice == "y":
+    if choice == "Y" or choice == "y":
         part_number = int(subprocess.Popen(["parted","-ms",dev,"print","|","tail","-1","|","cut","-b1"], stdout=subprocess.PIPE).communicate())
         count = part_number*128 + 1024
         subprocess.Popen(["dd","of="+dev,"if="+file,"bs=1","count="+str(count)], stdout=subprocess.PIPE)
@@ -57,4 +57,28 @@ print("2 - Save disk")
 print("3 - Restore disk")
 print("4 - Integrity check")
 
+choice = int(input())
+
+if choice == 1:
+    list_disk()
+elif choice == 2:
+    print("Backup file destination :")
+    file_dst = input()
+    print("Disk device path (e.g. /dev/sda) :")
+    dev_file = input()
+    save_disk(file_dst, dev_file)
+elif choice == 3:
+    print("Backup file path :")
+    file_dst = input()
+    print("Disk device path destination (e.g. /dev/sda) :")
+    dev_file = input()
+    restore_disk(file_dst, dev_file)
+elif choice == 4:
+    print("Backup file destination :")
+    file_dst = input()
+    print("Disk device path (e.g. /dev/sda) :")
+    dev_file = input()
+    check_disk(file_dst, dev_file)
+else:
+    print("Bad choice number")
 
