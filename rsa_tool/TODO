@@ -1,8 +1,10 @@
 # RSA toolbox :
     - Encryption and decryption
     - Switch for function calling with args
+    - Test every output
     - Wrong inputs protection
-
+    - Direct output data to stdout
+    - Read DH parameters
 # ECC :
     - Everything
 
