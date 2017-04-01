@@ -37,11 +37,15 @@ def args():
     parser.add_argument('-q','--prime2', action="store_true", help="get second prime number")
     parser.add_argument('-ei', '--exponant-in', help="input public exponant number")
     parser.add_argument('-mi', '--modulus-in', help="input modulus number")
-    parser.add_argument('-di','--decipher-in', help="input private exponant number")
+    parser.add_argument('-pei','--privexp-in', help="input private exponant number")
     parser.add_argument('-pi','--prime1-in', help="input first prime p")
     parser.add_argument('-qi','--prime2-in', help="input second prime q")
-    parser.add_argument('-c', '--cipher', choices=['path','text'], help="cipher data with provided data (raw numbers or public key)")
-    parser.add_argument('-d', '--decipher', choices=['path','text'], help="decipher data with provided data (raw numbers or private key)")
+    parser.add_argument('-c', '--cipher', choices=['path','text'], help="cipher data with provided data (raw numbers or public key) with stdin or file input")
+    parser.add_argument('-ci','--cipher-in', help="path or text to cipher with RSA")
+    parser.add_argument('-co','--cipher-out', help="path of cipher output")
+    parser.add_argument('-di','--decipher-in', help="path or text to decipher with RSA")
+    parser.add_argument('-do','--decipher-out', help="path of decipher output")
+    parser.add_argument('-d', '--decipher', choices=['path','text'], help="decipher data with provided data (raw numbers or private key) with stdin or file input")
     parser.add_argument('-b', '--bytes-len', help="get bit length of provided key (raw numbers or key file)")
     parser.add_argument('--random', type=int,  help="get random prime number with given bit size")
     parser.add_argument('--factor', help="factor number with factordb.com (if possible)")
@@ -169,7 +173,171 @@ def args():
             print(export_pub(key, args.outform).decode('utf-8'))
         else:
             print("Can't create key, missing arguments or incorrect output type")
+            exit()
+    elif args.cipher != None and args.decipher == None:
+        if args.pubin != None and args.modulus_in == None and args.exponant_in == None and args.inform != None:
+            if args.cipher == "path":
+                if args.cipher_in != None and os.path.isfile(args.cipher_in):
+                    key = load_pub(args.inform, args.pubin)
+                    ciphered = encrypt(open(args.cipher_in,'r').read(), key['e'], key['n'])
+                    if args.cipher_out != None:
+                        output = open(args.cipher_out,"wb")
+                        output.write(ciphered)
+                        output.close()
+                    else:
+                        print(ciphered)
+                else:
+                    print("Path for input data doesn't exists or is not specified with -ci option")
+                    exit()
+            elif args.cipher == "text":
+                key = load_pub(args.inform, args.pubin)
+                if args.cipher_in != None: 
+                    ciphered = encrypt(args.cipher_in, key['e'], key['n'])
+                elif sys.stdin != None:
+                    ciphered = encrypt(sys.stdin.read(), key['e'], key['n'])
+                else:
+                    print("Input data not found, use -ci option or STDIN")
+                    exit()
 
+                if args.cipher_out != None:
+                    output = open(args.cipher_out,"wb")
+                    output.write(ciphered)
+                    output.close()
+                else:
+                    print(ciphered)
+            else:
+                print("Wrong option for cipher")
+                exit()
+        elif args.modulus_in != None and args.exponant_in != None and args.pubin == None and args.inform == None:
+            if (args.hexpair and not args.hex) or (args.hex and not args.hexpair):
+                pub_exp = int(args.exponant_in.replace(':',''),16)
+                modulus = int(args.modulus_in.replace(':',''),16)
+            else:
+                pub_exp = int(args.exponant_in)
+                modulus = int(args.modulus_in)
+
+            if args.cipher == "path":
+                if args.cipher_in != None and os.path.isfile(args.cipher_in):
+                    
+                    ciphered = encrypt(args.cipher_in, pub_exp, modulus)
+                    if args.cipher_out != None:
+                        output = open(args.cipher_out,"wb")
+                        output.write(ciphered)
+                        output.close()
+                    else:
+                        print(ciphered)
+                else:
+                    print("File doesn't exists or input path not provided")
+                    exit()
+            elif args.cipher == "text":
+                if args.cipher_in != None or sys.stdin != None:
+                    if sys.stdin == None: 
+                        ciphered = encrypt(args.cipher_in, pub_exp, modulus)
+                    else:
+                        ciphered = encrypt(sys.stdin.read(), pub_exp, modulus)
+                    if args.cipher_out != None:
+                        output = open(args.cipher_out,"wb")
+                        output.write(ciphered)
+                        output.close()
+                    else:
+                        print(ciphered)
+                else:
+                    print("Input text not provided")
+                    exit()
+            else:
+                print("Wrong option for cipher")
+                exit()
+        else:
+            print("Public key argument -pubin cannot be used with -mi or -ei or -inform argument missing")
+    elif args.decipher != None and args.cipher == None:
+        if args.privin != None and args.prime1_in == None and args.prime2_in == None and args.modulus_in == None and args.exponant_in == None and args.privexp_in == None and args.inform != None:
+            if args.decipher == "path":
+                if args.decipher_in != None and os.path.isfile(args.decipher_in):
+                    key = load_priv(args.inform, args.privin)
+                    deciphered = decrypt(open(args.decipher_in,'rb').read(), key['e'], key['d'], key['n'])
+                    if args.decipher_out != None:
+                        output = open(args.decipher_out,"wb")
+                        output.write(deciphered)
+                        output.close()
+                    else:
+                        print(deciphered)
+                else:
+                    print("Path doesn't exists or is not specified with -di option")
+                    exit()
+            elif args.decipher == "text":
+                key = load_priv(args.inform, args.privin)
+                if args.decipher_in != None: 
+                    deciphered = decrypt(args.decipher_in, key['e'], key['d'], key['n'])
+                elif sys.stdin != None:
+                    deciphered = decrypt(sys.stdin.read(), key['e'], key['d'], key['n'])
+                else:
+                    print("Input data not found, use -di option or STDIN")
+                    exit()
+
+                if args.decipher_out != None:
+                    output = open(args.decipher_out,"wb")
+                    output.write(deciphered)
+                    output.close()
+                else:
+                    print(deciphered)
+            else:
+                print("Wrong option for cipher")
+                exit()
+        elif args.privin == None and args.inform == None and (args.modulus_in != None or (args.prime1_in != None and args.prime2 != None)) and args.exponant_in != None and args.decipher_in != None:
+            # Integer options parsing
+            if (args.hexpair and not args.hex) or (args.hex and not args.hexpair):
+                pub_exp = int(args.exponant_in.replace(':',''),16)
+                if args.modulus_in != None:
+                    modulus = int(args.modulus_in.replace(':',''),16)
+                else:
+                    modulus = int(args.prime1_in.replace(':',''),16)*int(args.prime2_in.replace(':',''),16)
+                priv_exp = int(args.privexp_in.replace(':',''),16)
+            else:
+                pub_exp = int(args.exponant_in)
+                if args.modulus_in != None:
+                    modulus = int(args.modulus_in)
+                else:
+                    modulus = int(args.prime1_in)*int(args.prime2_in)
+                priv_exp = int(args.privexp_in)
+
+            if args.decipher == "path":
+                if args.decipher_in != None and os.path.isfile(args.decipher_in):
+                    decipher = decrypt(args.decipher_in,pub_exp,priv_exp,modulus)
+                    if args.decipher_out != None:
+                        output = open(args.decipher_out,"wb")
+                        output.write(decipher)
+                        output.close()
+                    else:
+                        print(decipher)
+                else:
+                    print("File doesn't exists or input path not provided")
+                    exit()
+            elif args.decipher == "text":
+                if args.decipher_in != None:
+                    decipher = decrypt(args.decipher_in,pub_exp,priv_exp,modulus)
+                    if args.decipher_out != None:
+                        output = open(args.decipher_out,"wb")
+                        output.write(decipher)
+                        output.close()
+                    else:
+                        print(decipher)
+                else:
+                    print("Input text not provided")
+                    exit()
+            else:
+                print("Wrong option for decipher")
+                exit()
+        else:
+            print("Private key argument -privin cannot be used with -mi, -ei or -di")
+            exit()
+    elif args.random:
+        pass    
+    elif args.factor:
+        pass
+    elif args.bytes_len:
+        pass
+    else:
+        print("Unrecognized arguments or wrong argument combination")
    
 def convert(inform, outform, type, file_src, passphrase=None):
     converted = ""
@@ -300,17 +468,24 @@ def get_prime(bits):
     return prime
 
 def encrypt(data,e,n):
-    key = RSA.construct((e,n))
-    cipher = PCKS1_v1_5.new(key)
-    # possible SHA to add
-    message = cipher.encrypt(data)
-    return message
-
-def decrypt(data, e,d,n):
-    key = RSA.construct((e,d,n))
+    key = RSA.construct((n,e))
     cipher = PKCS1_v1_5.new(key)
-    # possible SHA to add
-    message = cipher.decrypt(data)
+
+    try:
+        message = cipher.encrypt(data.encode('utf-8'))
+    except ValueError as e:
+        print("Your key size if too small to encode this text")
+    return ':'.join([hex(int(msg)).replace('0x','') for msg in message])
+
+def decrypt(data,e,d,n):
+    key = RSA.construct((n,d,e))
+    cipher = PKCS1_v1_5.new(key)
+
+    hex_string = data.split(':')
+    decrypt = b''
+    for hex in hex_string:
+        decrypt += bytes([int(hex,16)])
+    message = cipher.decrypt(decrypt, -1)
     return message
 
 

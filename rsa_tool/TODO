@@ -1,13 +1,12 @@
 # RSA toolbox :
     - Encryption and decryption
-    - Switch for function calling with args
     - Test every output
     - Wrong inputs protection
+    - Auto-detect input PEM format
     - Direct output data to stdout
     - Read DH parameters
-# ECC :
-    - Everything
-
+    - Detect weak keys (fermat primes, wiener attack, common factor keys, factordb.com vulnerable)
+    - Cipher with AES
 # GPT :
     - Wrong inputs protection
     - Test
