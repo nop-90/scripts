@@ -1,0 +1,90 @@
+PKCS8 RSA encryption with public key
+PKCS8 RSA encryption with modulus, pub_exp
+PKCS8 RSA encryption with wrong data
+PKCS8 RSA decryption with private key
+PKCS8 RSA decryption with modulus, pub_exp, priv_exp
+PKCS8 RSA decryption with wrong data
+
+PKCS8 RSA encryption with public key, input on stdin
+PKCS8 RSA encryption with modulus, pub_exp, input on stdin
+PKCS8 RSA encryption with wrong data, input on stdin
+PKCS8 RSA decryption with private key, input on stdin
+PKCS8 RSA decryption with modulus, pub_exp, priv_exp, input on stdin
+PKCS8 RSA decryption with wrong data, input on stdin
+
+PKCS1 RSA encryption with public key
+PKCS1 RSA encryption with modulus, pub_exp
+PKCS1 RSA encryption with wrong data
+PKCS1 RSA decryption with private key
+PKCS1 RSA decryption with modulus, pub_exp, priv_exp
+PKCS1 RSA decryption with wrong data
+
+PKCS1 RSA encryption with public key, input on stdin
+PKCS1 RSA encryption with modulus, pub_exp, input on stdin
+PKCS1 RSA encryption with wrong data, input on stdin
+PKCS1 RSA decryption with private key, input on stdin
+PKCS1 RSA decryption with modulus, pub_exp, priv_exp, input on stdin
+PKCS1 RSA decryption with wrong data, input on stdin
+
+SSH RSA encryption with public key
+SSH RSA encryption with modulus, pub_exp
+SSH RSA encryption with wrong data
+SSH RSA decryption with private key
+SSH RSA decryption with modulus, pub_exp, priv_exp
+SSH RSA decryption with wrong data
+
+SSH RSA encryption with public key, input on stdin
+SSH RSA encryption with modulus, pub_exp, input on stdin
+SSH RSA encryption with wrong data, input on stdin
+SSH RSA decryption with private key, input on stdin
+SSH RSA decryption with modulus, pub_exp, priv_exp, input on stdin
+SSH RSA decryption with wrong data, input on stdin
+
+PKCS8 AES encryption with public key
+PKCS8 AES encryption with modulus, pub_exp
+PKCS8 AES encryption with wrong data
+PKCS8 AES decryption with private key
+PKCS8 AES decryption with modulus, pub_exp, priv_exp
+PKCS8 AES decryption with wrong data
+
+PKCS8 AES encryption with public key, input on stdin
+PKCS8 AES encryption with modulus, pub_exp, input on stdin
+PKCS8 AES encryption with wrong data, input on stdin
+PKCS8 AES decryption with private key, input on stdin
+PKCS8 AES decryption with modulus, pub_exp, priv_exp, input on stdin
+PKCS8 AES decryption with wrong data, input on stdin
+
+PKCS1 AES encryption with public key
+PKCS1 AES encryption with modulus, pub_exp
+PKCS1 AES encryption with wrong data
+PKCS1 AES decryption with private key
+PKCS1 AES decryption with modulus, pub_exp, priv_exp
+PKCS1 AES decryption with wrong data
+
+PKCS1 AES encryption with public key, input on stdin
+PKCS1 AES encryption with modulus, pub_exp, input on stdin
+PKCS1 AES encryption with wrong data, input on stdin
+PKCS1 AES decryption with private key, input on stdin
+PKCS1 AES decryption with modulus, pub_exp, priv_exp, input on stdin
+PKCS1 AES decryption with wrong data, input on stdin
+
+SSH AES encryption with public key
+SSH AES encryption with modulus, pub_exp
+SSH AES encryption with wrong data
+SSH AES decryption with private key
+SSH AES decryption with modulus, pub_exp, priv_exp
+SSH AES decryption with wrong data
+
+SSH AES encryption with public key, input on stdin
+SSH AES encryption with modulus, pub_exp, input on stdin
+SSH AES encryption with wrong data, input on stdin
+SSH AES decryption with private key, input on stdin
+SSH AES decryption with modulus, pub_exp, priv_exp, input on stdin
+SSH AES decryption with wrong data, input on stdin
+
+
+Wrong data : 
+    - Path
+    - Format string
+    - Missing options
+    - Wrong format

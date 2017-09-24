@@ -3,6 +3,7 @@ from bs4 import BeautifulSoup
 from Crypto.PublicKey import RSA
 from Crypto.Cipher import PKCS1_v1_5
 from Crypto.Hash import SHA
+from Crypto.Cipher import AES
 import urllib.request
 import sys
 import subprocess
@@ -27,7 +28,7 @@ def args():
     parser.add_argument('--pubin', action="store", help="input public key file", type=lambda x: is_valid_file(parser, x))
     parser.add_argument('--hexpair', action="store_true", help="use hex-pair format in output")
     parser.add_argument('--hex', action="store_true", help="use raw hex format in output")
-    parser.add_argument('--privin', action="store", help="input private key file")
+    parser.add_argument('--privin', action="store", help="input private key file", type=lambda x: is_valid_file(parser, x))
     parser.add_argument('--inform', action="store", help="input key format", choices=["PKCS8","SSH","PKCS1"])
     parser.add_argument('--outform', action="store", help="output key format", choices=["PKCS8","SSH","PKCS1"])
     parser.add_argument('-m','--modulus', action="store_true", help="print modulus from key")
@@ -41,14 +42,16 @@ def args():
     parser.add_argument('-pi','--prime1-in', help="input first prime p")
     parser.add_argument('-qi','--prime2-in', help="input second prime q")
     parser.add_argument('-c', '--cipher', choices=['path','text'], help="cipher data with provided data (raw numbers or public key) with stdin or file input")
-    parser.add_argument('-ci','--cipher-in', help="path or text to cipher with RSA")
+    parser.add_argument('-ci','--cipher-in', help="path or text to cipher")
     parser.add_argument('-co','--cipher-out', help="path of cipher output")
-    parser.add_argument('-di','--decipher-in', help="path or text to decipher with RSA")
+    parser.add_argument('-di','--decipher-in', help="path or text to decipher")
+    parser.add_argument('-ct','--cipher-type', help="select type of cipher to use for encryption or decryption", choices=['RSA','AES'])
     parser.add_argument('-do','--decipher-out', help="path of decipher output")
     parser.add_argument('-d', '--decipher', choices=['path','text'], help="decipher data with provided data (raw numbers or private key) with stdin or file input")
     parser.add_argument('-b', '--bytes-len', help="get bit length of provided key (raw numbers or key file)")
+    parser.add_argument('-w', '--weak-keys', help="detect weak keys")
     parser.add_argument('--random', type=int,  help="get random prime number with given bit size")
-    parser.add_argument('--factor', help="factor number with factordb.com (if possible)")
+    parser.add_argument('--factor', help="factor modulus with factordb.com (if possible)")
     parser.add_argument('-g','--generate', action="store_true", help="generate key from provided numbers")
     args = parser.parse_args()
 
@@ -179,10 +182,17 @@ def args():
             if args.cipher == "path":
                 if args.cipher_in != None and os.path.isfile(args.cipher_in):
                     key = load_pub(args.inform, args.pubin)
-                    ciphered = encrypt(open(args.cipher_in,'r').read(), key['e'], key['n'])
+                    if args.cipher_type != None:
+                        ciphered = encrypt(open(args.cipher_in,'r').read(), key['e'], key['n'])
+                    else:
+                        ciphered = encrypt(open(args.cipher_in,'r').read(), key['e'], key['n'], args.cipher_type)
+
                     if args.cipher_out != None:
                         output = open(args.cipher_out,"wb")
-                        output.write(ciphered)
+                        if args.cipher_type == "AES":
+                            output.write(ciphered[0]+'|'+ciphered[1])
+                        else:
+                            output.write(ciphered)
                         output.close()
                     else:
                         print(ciphered)
@@ -191,17 +201,31 @@ def args():
                     exit()
             elif args.cipher == "text":
                 key = load_pub(args.inform, args.pubin)
-                if args.cipher_in != None: 
-                    ciphered = encrypt(args.cipher_in, key['e'], key['n'])
-                elif sys.stdin != None:
-                    ciphered = encrypt(sys.stdin.read(), key['e'], key['n'])
+                if args.cipher_in != None or sys.stdin != None:
+                    if sys.stdin == None: 
+                        if args.cipher_type != None:
+                            ciphered = encrypt(args.cipher_in, pub_exp, modulus, args.cipher_type)
+                        else:
+                            ciphered = encrypt(args.cipher_in, pub_exp, modulus)
+
+                    elif args.cipher_in != None:
+                        if args.cipher_type != None:
+                            ciphered = encrypt(sys.stdin.read(), pub_exp, modulus, args.cipher_type)
+                        else:
+                            ciphered = encrypt(sys.stdin.read(), pub_exp, modulus)
+                    else:
+                        print("Input data not found, use -ci option or STDIN")
+                        exit()
                 else:
-                    print("Input data not found, use -ci option or STDIN")
+                    print("Input text not provided")
                     exit()
 
                 if args.cipher_out != None:
                     output = open(args.cipher_out,"wb")
-                    output.write(ciphered)
+                    if args.cipher_type == "AES":
+                        output.write(ciphered[0]+'|'+ciphered[1])
+                    else:
+                        output.write(ciphered)
                     output.close()
                 else:
                     print(ciphered)
@@ -218,11 +242,17 @@ def args():
 
             if args.cipher == "path":
                 if args.cipher_in != None and os.path.isfile(args.cipher_in):
-                    
-                    ciphered = encrypt(args.cipher_in, pub_exp, modulus)
+                    if args.cipher_type != None:
+                        ciphered = encrypt(args.cipher_in, pub_exp, modulus, args.cipher_type)
+                    else:
+                        ciphered = encrypt(args.cipher_in, pub_exp, modulus)
+
                     if args.cipher_out != None:
                         output = open(args.cipher_out,"wb")
-                        output.write(ciphered)
+                        if args.cipher_type == "AES":
+                            output.write(ciphered[0]+'|'+ciphered[1])
+                        else:
+                            output.write(ciphered)
                         output.close()
                     else:
                         print(ciphered)
@@ -232,12 +262,26 @@ def args():
             elif args.cipher == "text":
                 if args.cipher_in != None or sys.stdin != None:
                     if sys.stdin == None: 
-                        ciphered = encrypt(args.cipher_in, pub_exp, modulus)
+                        if args.cipher_type != None:
+                            ciphered = encrypt(args.cipher_in, pub_exp, modulus, args.cipher_type)
+                        else:
+                            ciphered = encrypt(args.cipher_in, pub_exp, modulus)
+
+                    elif args.cipher_in != None:
+                        if args.cipher_type != None:
+                            ciphered = encrypt(sys.stdin.read(), pub_exp, modulus, args.cipher_type)
+                        else:
+                            ciphered = encrypt(sys.stdin.read(), pub_exp, modulus)
                     else:
-                        ciphered = encrypt(sys.stdin.read(), pub_exp, modulus)
+                        print("Input data not found, use -ci option or STDIN")
+                        exit()
+
                     if args.cipher_out != None:
                         output = open(args.cipher_out,"wb")
-                        output.write(ciphered)
+                        if args.cipher_type == "AES":
+                            output.write(ciphered[0]+'|'+ciphered[1])
+                        else:
+                            output.write(ciphered)
                         output.close()
                     else:
                         print(ciphered)
@@ -266,10 +310,18 @@ def args():
                     exit()
             elif args.decipher == "text":
                 key = load_priv(args.inform, args.privin)
-                if args.decipher_in != None: 
-                    deciphered = decrypt(args.decipher_in, key['e'], key['d'], key['n'])
+                if args.decipher_in != None:
+                    if args.cipher_type != None:
+                        deciphered = decrypt(args.decipher_in, key['e'], key['d'], key['n'], args.cipher_type)
+                    else:
+                        deciphered = decrypt(args.decipher_in, key['e'], key['d'], key['n'])
+
                 elif sys.stdin != None:
-                    deciphered = decrypt(sys.stdin.read(), key['e'], key['d'], key['n'])
+                    if args.cipher_type != None:
+                        deciphered = decrypt(sys.stdin.read(), key['e'], key['d'], key['n'], args.cipher_type)
+                    else:
+                        deciphered = decrypt(sys.stdin.read(), key['e'], key['d'], key['n'])
+
                 else:
                     print("Input data not found, use -di option or STDIN")
                     exit()
@@ -302,7 +354,11 @@ def args():
 
             if args.decipher == "path":
                 if args.decipher_in != None and os.path.isfile(args.decipher_in):
-                    decipher = decrypt(args.decipher_in,pub_exp,priv_exp,modulus)
+                    if args.cipher_type != None:
+                        decipher = decrypt(args.decipher_in,pub_exp,priv_exp,modulus, args.cipher_type)
+                    else:
+                        decipher = decrypt(args.decipher_in,pub_exp,priv_exp,modulus)
+
                     if args.decipher_out != None:
                         output = open(args.decipher_out,"wb")
                         output.write(decipher)
@@ -314,7 +370,11 @@ def args():
                     exit()
             elif args.decipher == "text":
                 if args.decipher_in != None:
-                    decipher = decrypt(args.decipher_in,pub_exp,priv_exp,modulus)
+                    if args.cipher_type != None:
+                        decipher = decrypt(args.decipher_in,pub_exp,priv_exp,modulus, args.cipher_type)
+                    else:
+                        decipher = decrypt(args.decipher_in,pub_exp,priv_exp,modulus)
+
                     if args.decipher_out != None:
                         output = open(args.decipher_out,"wb")
                         output.write(decipher)
@@ -331,7 +391,7 @@ def args():
             print("Private key argument -privin cannot be used with -mi, -ei or -di")
             exit()
     elif args.random:
-        pass    
+        print(get_prime(args.random))    
     elif args.factor:
         pass
     elif args.bytes_len:
@@ -467,27 +527,59 @@ def get_prime(bits):
     prime = int(subprocess.Popen(['openssl','prime','-generate','-bits',bits], stdout=subprocess.PIPE).communicate())
     return prime
 
-def encrypt(data,e,n):
+def encrypt(data,e,n,cipher):
     key = RSA.construct((n,e))
     cipher = PKCS1_v1_5.new(key)
+    
+    if cipher == 'RSA':
+        try:
+            message = cipher.encrypt(data.encode('utf-8'))
+        except ValueError as e:
+            print("Your key size is too small to encode this text with RSA (try increasing the modulus length)")
+        return ':'.join([hex(int(msg)).replace('0x','') for msg in message])
+    elif cipher == 'AES':
+        aeskey = Random.new().read(24)
+        iv = Random.new().read(AES.block_size)
+        cipher_aes = AES.new(aeskey, AES.MODE_CBC, iv)
+        msg = iv + cipher_aes.encrypt(data)
 
-    try:
-        message = cipher.encrypt(data.encode('utf-8'))
-    except ValueError as e:
-        print("Your key size if too small to encode this text")
-    return ':'.join([hex(int(msg)).replace('0x','') for msg in message])
+        random_gen = Random.new().read
+        ciphertext = cipher.encrypt(aeskey)
+        return [':'.join([hex(int(cipherbit)).replace('0x','') for bit in ciphertext]),':'.join([hex(int(text_bit)).replace('0x','') for text_bit in msg])]
+    else:
+        print(str(cipher)+" is not supported")
 
-def decrypt(data,e,d,n):
+def decrypt(data,e,d,n,cipher):
     key = RSA.construct((n,d,e))
     cipher = PKCS1_v1_5.new(key)
 
     hex_string = data.split(':')
     decrypt = b''
-    for hex in hex_string:
-        decrypt += bytes([int(hex,16)])
-    message = cipher.decrypt(decrypt, -1)
-    return message
+    decrypt_aes_key = b''
+    decrypt_iv = b''
+    if cipher == "RSA":
+        for hex in hex_string:
+            decrypt += bytes([int(hex,16)])
+        message = cipher.decrypt(decrypt, -1)
+        return message
+    elif cipher == "AES":
+        data = data.split('|')
+        hex_string_key = data[0].split(':')
+        for hex in hex_string_key:
+            decrypt_aes_key += bytes([int(hex,16)])
+        aeskey = cipher.decrypt(decrypt_aes_key, -1)
 
+        hex_text = data[1].split(':')
+        for i in range(0,16):
+            iv += bytes([int(data[i],16)])
+        for hex in hex_text:
+            decrypt += bytes([int(hex,16)])
+
+        cipher_aes = AES.new(aeskey, AES.MODE_CBC, iv)
+        message = cipher_aes.decrypt(decrypt, -1)
+        return message
+    else:
+        print(str(cipher)+" is not supported")
 
 def get_prime_factor(factoring):
     prime_factors = []
