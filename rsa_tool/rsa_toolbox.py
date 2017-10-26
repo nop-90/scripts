@@ -17,7 +17,6 @@ from rsa_convert import *
 def main():
     args()
 
-
 def is_valid_file(parser, arg):
     if not os.path.exists(arg):
         parser.error("The file %s does not exist!" % arg)
@@ -202,7 +201,7 @@ def args():
             elif args.cipher == "text":
                 key = load_pub(args.inform, args.pubin)
                 if args.cipher_in != None or sys.stdin != None:
-                    if sys.stdin == None: 
+                    if sys.stdin == None:
                         if args.cipher_type != None:
                             ciphered = encrypt(args.cipher_in, pub_exp, modulus, args.cipher_type)
                         else:
@@ -261,7 +260,7 @@ def args():
                     exit()
             elif args.cipher == "text":
                 if args.cipher_in != None or sys.stdin != None:
-                    if sys.stdin == None: 
+                    if sys.stdin == None:
                         if args.cipher_type != None:
                             ciphered = encrypt(args.cipher_in, pub_exp, modulus, args.cipher_type)
                         else:
@@ -391,9 +390,9 @@ def args():
             print("Private key argument -privin cannot be used with -mi, -ei or -di")
             exit()
     elif args.random:
-        print(get_prime(args.random))    
+        print(get_prime(args.random))
     elif args.factor:
-        pass
+        print(get_prime_factor(args.factor))
     elif args.bytes_len:
         pass
     else:
@@ -456,7 +455,7 @@ def is_prime(num):
     for i in range(1,isPrime):
         if num % i != 0:
             isPrime = False
-    
+
     return isPrime
 
 def int_to_hexpair(number):
@@ -530,7 +529,7 @@ def get_prime(bits):
 def encrypt(data,e,n,cipher):
     key = RSA.construct((n,e))
     cipher = PKCS1_v1_5.new(key)
-    
+
     if cipher == 'RSA':
         try:
             message = cipher.encrypt(data.encode('utf-8'))
@@ -605,4 +604,3 @@ def get_prime_factor(factoring):
 
 if __name__ == "__main__":
     main()
-

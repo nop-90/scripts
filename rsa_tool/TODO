@@ -1,7 +1,7 @@
 # RSA toolbox :
     - Test every output
     - Wrong inputs protection
-    - Auto-detect input PEM format
+    - Auto-detect input PEM format (create class for keys)
     - Delete option identifying path or text
     - Direct output data to stdout
     - Read DH parameters

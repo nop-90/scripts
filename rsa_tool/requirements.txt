@@ -1,0 +1,4 @@
+PyCrypto
+GMPY
+SymPy
+requests
