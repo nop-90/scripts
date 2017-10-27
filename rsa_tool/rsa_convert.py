@@ -3,6 +3,7 @@ import subprocess
 import shutil
 import struct
 import re
+import os
 from base64 import b64decode
 
 def parse_DER(der):
@@ -36,19 +37,26 @@ class PrivateKey:
     pk_object = {}
     key_type = ['ssh','pkcs1','pkcs8']
 
-    def __init__(self, file_src, passphrase):
+    def __init__(self, file_src, passphrase = None):
         if os.path.exists(file_src):
-                self.file_src = file_src
-                init_privkey()
-                self.pk_content = open(self.file_src).read()
-                if passphrase != "":
-                    self.passphrase = passphrase
+            self.file_src = file_src
+            self.pk_content = open(self.file_src).read()
+            self.init_privkey()
+            if passphrase != "":
+                self.passphrase = passphrase
         else:
-            raise IOError("Private key not found")
+            self.pk_content = file_src
+            self.init_privkey()
+
+    def getKey(self):
+        return self.pk_object
+
+    def raiseExFunction():
+        raise PrivException("Conversion from "+self.pk_type+" to "+input_key_type+" not supported")
 
     def convert(self, input_key_type):
         if input_key_type in self.key_type:
-            getattr(self,self.pk_type+"_to_"+input_key_type,lambda: raise PrivException("Conversion from "+self.pk_type+" to "+input_key_type+" not supported"))
+            getattr(self,self.pk_type+"_to_"+input_key_type,self.raiseExFunction)
         else:
             raise PrivException("Output format not supported")
 
@@ -63,11 +71,15 @@ class PrivateKey:
             self.pk_type = "pkcs8"
             self.pk_object = self.pkcs8_privkey_reading()
         # OpenSSH
-        elif header[0:35] == '-----BEGIN OPENSSH PRIVATE KEY-----'
+        elif header[0:35] == '-----BEGIN OPENSSH PRIVATE KEY-----':
             self.pk_type = "ssh"
             self.pk_object = self.ssh_privkey_reading()
         else:
             raise PrivException("Malformed header, is it really a RSA private key ?")
+
+    def getByteSize(self):
+        original_key = RSA.importKey(self.pk_content, self.passphrase)
+        return original_key.bit_length
 
     def pkcs1_privkey_reading(self):
         original_key = RSA.importKey(self.pk_content, self.passphrase)
@@ -147,39 +159,44 @@ class PublicKey:
     def __init__(self, file_src):
         if os.path.exists(file_src):
                 self.file_src = file_src
-                init_privkey()
                 self.pk_content = open(self.file_src).read()
-                if passphrase != "":
-                    self.passphrase = passphrase
+                self.init_pubkey()
         else:
-            raise IOError("Private key not found")
+            self.pk_content = file_src
+            self.init_pubkey()
 
     def init_pubkey(self):
         header = self.pk_content.split('\n')[0]
         # PKCS8
-        if header[0:26] == '-----BEGIN PUBLIC KEY-----':
+        if header[0:26] == '-----BEGIN PUBLIC KEY-----' or header[0:30] == '-----BEGIN RSA PUBLIC KEY-----':
             self.pk_type = "pkcs8"
-            self.pk_object = self.pkcs8_privkey_reading()
+            self.pk_object = self.pkcs8_pubkey_reading()
         # OpenSSH
-        elif header[0:7] == 'ssh-rsa'
+        elif header[0:7] == 'ssh-rsa':
             self.pk_type = "ssh"
-            self.pk_object = self.ssh_privkey_reading()
+            self.pk_object = self.ssh_pubkey_reading()
         else:
-            raise PrivException("Malformed header, is it really a RSA public key ?")
+            raise PubException("Malformed header, is it really a RSA public key ?")
+
+    def getKey(self):
+        return self.pk_object
+
+    def raiseExFunction():
+        raise PubException("Conversion from "+self.pk_type+" to "+input_key_type+" not supported")
 
     def convert(self, input_key_type):
         if input_key_type in self.key_type:
-            getattr(self,self.pk_type+"_to_"+input_key_type,lambda: raise PrivException("Conversion from "+self.pk_type+" to "+input_key_type+" not supported"))
+            return getattr(self,self.pk_type+"_to_"+input_key_type,self.raiseExFunction)()
         else:
-            raise PrivException("Output format not supported")
+            raise PubException("Output format not supported")
+
+    def getByteSize(self):
+        original_key = RSA.importKey(self.pk_content, self.passphrase)
+        return original_key.bit_length
 
     def pkcs8_pubkey_reading(self):
-        # Too much key formats
-        # https://tls.mbed.org/kb/cryptography/asn1-key-structures-in-der-and-pem
-        ssh_key_format = subprocess.Popen(['ssh-keygen','-i','-m','PKCS8','-f',self.file_src],
-                stdout=subprocess.PIPE).communicate()
-        pub_key = parse_DER(ssh_key_format[0].split(None)[1])
-        return pub_key
+        original_key = RSA.importKey(self.pk_content)
+        return {"e":original_key.e,"n":original_key.n}
 
     def ssh_pubkey_reading(self):
         key_str = self.pk_content.split(None)
@@ -190,18 +207,25 @@ class PublicKey:
         return RSA.construct((n,e))
 
     def ssh_to_pkcs8(self):
-        pub_numbers = self.ssh_pubkey_reading(self.file_src)
-        converted_key = generate_pubkey(pub_numbers['n'], pub_numbers['e'])
-        return  export_pub(converted_key, "PKCS8")
+        converted_key = self.generate_pubkey(self.pk_object['n'], self.pk_object['e'])
+        return self.export(converted_key, "pkcs8")
 
     def pkcs8_to_ssh(self):
-        original_key = RSA.importKey(open(self.file_src).read(), passphrase)
-        return export_priv(original_key, "SSH")
+        original_key = RSA.importKey(self.pk_content)
+        return self.export(original_key, "ssh")
 
-    def export_pub(self, key, format):
+    def pkcs8_to_pkcs8(self):
+        return self.pk_content
+
+    def ssh_to_ssh(self):
+        return self.pk_content
+
+    def export(self, key, format):
         export_key = ""
-        if format == "PKCS8":
-            export_key = key.exportKey(pkcs=8)
-        elif format == "SSH":
-            export_key = key.exportKey(format="OpenSSH")
+        if format == "pkcs8":
+            export_key = key.exportKey(pkcs=8).decode('utf-8')
+        elif format == "ssh":
+            export_key = key.exportKey(format="OpenSSH").decode('utf-8')
+        else:
+            raise PubException("Format not supported for public key")
         return export_key

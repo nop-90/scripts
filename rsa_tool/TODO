@@ -1,9 +1,7 @@
 # RSA toolbox :
     - Test every output
     - Wrong inputs protection
-    - Auto-detect input PEM format (create class for keys)
-    - Delete option identifying path or text
-    - Direct output data to stdout
+    - Finish argument handling with new method
     - Read DH parameters
     - Detect weak keys (fermat primes, wiener attack, common factor keys, factordb.com vulnerable)
     - Factor with yafu
