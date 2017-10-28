@@ -38,15 +38,20 @@ class PrivateKey:
     key_type = ['ssh','pkcs1','pkcs8']
 
     def __init__(self, file_src, passphrase = None):
-        if os.path.exists(file_src):
-            self.file_src = file_src
-            self.pk_content = open(self.file_src).read()
-            self.init_privkey()
-            if passphrase != "":
-                self.passphrase = passphrase
+        if isinstance(file_src, str):
+            if os.path.exists(file_src):
+                self.file_src = file_src
+                self.pk_content = open(self.file_src).read()
+                self.init_privkey()
+                if passphrase != "":
+                    self.passphrase = passphrase
+        elif isinstance(file_src, dict):
+            if 'e' in file_src and 'n' in file_src and 'p' in file_src and 'q' in file_src and 'd' in file_src:
+                self.pk_object = file_src
+            else:
+                raise PubException("Object is not a correct private key")
         else:
-            self.pk_content = file_src
-            self.init_privkey()
+            raise PubException("Argument is not a file path or a private key object")
 
     def getKey(self):
         return self.pk_object
@@ -116,37 +121,46 @@ class PrivateKey:
     def ssh_to_pkcs8(self):
         converted_key = self.generate_privkey(self.pk_object['n'], self.pk_object['e'], self.pk_object['d'], self.pk_object['p'],
                 self.pk_object['q'])
-        return export_priv(converted_key, "PKCS8")
+        return export_priv("pkcs8", converted_key)
 
     def ssh_to_pkcs1(self):
         converted_key = self.generate_privkey(self.pk_object['n'], self.pk_object['e'], self.pk_object['d'], self.pk_object['p'],
             self.pk_object['q'])
-        return export_priv(converted_key, "PKCS1")
+        return export("pkcs1", converted_key)
 
     def pkcs1_to_pkcs8(self):
         original_key = RSA.importKey(self.pk_content, self.passphrase)
-        return export_priv(original_key, "PKCS8")
+        return export("pkcs8", original_key)
 
     def pkcs1_to_ssh(self):
         original_key = RSA.importKey(self.pk_content, self.passphrase)
-        return export_priv(original_key, "SSH")
+        return export("ssh", original_key)
 
     def pkcs8_to_pkcs1(self):
         original_key = RSA.importKey(self.pk_content, self.passphrase)
-        return export_priv(converted_key, "PKCS1")
+        return export("pkcs1", converted_key)
 
     def pkcs8_to_ssh(self):
         original_key = RSA.importKey(self.pk_content, self.passphrase)
-        return export_priv(original_key, "SSH")
+        return export("ssh", original_key)
 
-    def export_priv(self, key, format):
+    def export(self, format, key=None):
         export_key = ""
-        if format == "PKCS1":
-            export_key = key.exportKey()
-        elif format == "PKCS8":
-            export_key = key.exportKey(pkcs=8)
-        elif format == "SSH":
-            export_key = key.exportKey(format="OpenSSH")
+        if key != None:
+            if format == "pkcs1":
+                export_key = key.exportKey().decode('utf-8')
+            elif format == "pkcs8":
+                export_key = key.exportKey(pkcs=8).decode('utf-8')
+            elif format == "ssh":
+                export_key = key.exportKey(format="OpenSSH").decode('utf-8')
+        else:
+            key = self.generate_privkey(self.pk_object['n'], self.pk_object['e'], self.pk_object['d'], self.pk_object['p'], self.pk_object['q'])
+            if format == "pkcs1":
+                export_key = key.exportKey().decode('utf-8')
+            elif format == "pkcs8":
+                export_key = key.exportKey(pkcs=8).decode('utf-8')
+            elif format == "ssh":
+                export_key = key.exportKey(format="OpenSSH").decode('utf-8')
         return export_key
 
 class PublicKey:
@@ -154,23 +168,31 @@ class PublicKey:
     pk_content = ""
     pk_object = ""
     pk_type = ""
-    key_type = ['pkcs8','ssh']
+    key_type = ['pkcs','ssh']
 
     def __init__(self, file_src):
-        if os.path.exists(file_src):
-                self.file_src = file_src
-                self.pk_content = open(self.file_src).read()
+        if isinstance(file_src, str):
+            if os.path.exists(file_src):
+                    self.file_src = file_src
+                    self.pk_content = open(self.file_src).read()
+                    self.init_pubkey()
+            else:
+                self.pk_content = file_src
                 self.init_pubkey()
+        elif isinstance(file_src, dict):
+            if 'e' in file_src and 'n' in file_src:
+                self.pk_object = file_src
+            else:
+                raise PubException("Object is not a correct public key")
         else:
-            self.pk_content = file_src
-            self.init_pubkey()
+            raise PubException("Argument is not a file path or a public key object")
 
     def init_pubkey(self):
         header = self.pk_content.split('\n')[0]
-        # PKCS8
+        # PKCS1 and 8
         if header[0:26] == '-----BEGIN PUBLIC KEY-----' or header[0:30] == '-----BEGIN RSA PUBLIC KEY-----':
-            self.pk_type = "pkcs8"
-            self.pk_object = self.pkcs8_pubkey_reading()
+            self.pk_type = "pkcs"
+            self.pk_object = self.pkcs_pubkey_reading()
         # OpenSSH
         elif header[0:7] == 'ssh-rsa':
             self.pk_type = "ssh"
@@ -194,7 +216,7 @@ class PublicKey:
         original_key = RSA.importKey(self.pk_content, self.passphrase)
         return original_key.bit_length
 
-    def pkcs8_pubkey_reading(self):
+    def pkcs_pubkey_reading(self):
         original_key = RSA.importKey(self.pk_content)
         return {"e":original_key.e,"n":original_key.n}
 
@@ -206,26 +228,35 @@ class PublicKey:
     def generate_pubkey(self,n,e):
         return RSA.construct((n,e))
 
-    def ssh_to_pkcs8(self):
+    def ssh_to_pkcs(self):
         converted_key = self.generate_pubkey(self.pk_object['n'], self.pk_object['e'])
-        return self.export(converted_key, "pkcs8")
+        return self.export("pkcs8", converted_key)
 
-    def pkcs8_to_ssh(self):
+    def pkcs_to_ssh(self):
         original_key = RSA.importKey(self.pk_content)
-        return self.export(original_key, "ssh")
+        return self.export("ssh", original_key)
 
-    def pkcs8_to_pkcs8(self):
+    def pkcs_to_pkcs(self):
         return self.pk_content
 
     def ssh_to_ssh(self):
         return self.pk_content
 
-    def export(self, key, format):
+    def export(self, format, key=None):
         export_key = ""
-        if format == "pkcs8":
-            export_key = key.exportKey(pkcs=8).decode('utf-8')
-        elif format == "ssh":
-            export_key = key.exportKey(format="OpenSSH").decode('utf-8')
+        if key != None:
+            if format == "pkcs":
+                export_key = key.exportKey(pkcs=1).decode('utf-8')
+            elif format == "ssh":
+                export_key = key.exportKey(format="OpenSSH").decode('utf-8')
+            else:
+                raise PubException("Format not supported for public key")
         else:
-            raise PubException("Format not supported for public key")
+            key = self.generate_pubkey(self.pk_object['n'], self.pk_object['e'])
+            if format == "pkcs":
+                export_key = key.exportKey(pkcs=1).decode('utf-8')
+            elif format == "ssh":
+                export_key = key.exportKey(format="OpenSSH").decode('utf-8')
+            else:
+                raise PubException("Format not supported for public key")
         return export_key

@@ -18,13 +18,17 @@ def main():
     args()
 
 class RSAToolbox:
-    def is_prime(self, num):
+    def isPrime(self, num):
         isPrime = True
         for i in range(1,isPrime):
             if num % i != 0:
                 isPrime = False
 
         return isPrime
+
+    def hexpair_to_int(self, number):
+        hexnumber = number.replace(":")
+        return int(number,16)
 
     def int_to_hexpair(self, number):
         hexdata = ""
@@ -160,29 +164,29 @@ class RSAToolbox:
             pass
         elif args.a:
             if args.f == 'dec' or args.f == None:
-                print(str(input_key.getKey()['e']))
-                print(str(input_key.getKey()['n']))
+                print("Exponant : "+str(input_key.getKey()['e']))
+                print("Modulus : "+str(input_key.getKey()['n']))
                 if isinstance(input_key, PrivateKey):
-                    print(str(input_key.getKey()['p']))
-                    print(str(input_key.getKey()['q']))
-                    print(str((input_key.getKey()['p']-1)*(input_key.getKey()['q']-1)))
-                    print(str(input_key.getKey()['d']))
+                    print("Prime 1 : "+str(input_key.getKey()['p']))
+                    print("Prime 2 : "+str(input_key.getKey()['q']))
+                    print("Phi : "+str((input_key.getKey()['p']-1)*(input_key.getKey()['q']-1)))
+                    print("Private exponant : "+str(input_key.getKey()['d']))
             elif args.f == 'hex':
-                print(hex(input_key.getKey()['e']))
-                print(hex(input_key.getKey()['n']))
+                print("Exponant : "+hex(input_key.getKey()['e']))
+                print("Modulus : "+hex(input_key.getKey()['n']))
                 if isinstance(input_key, PrivateKey):
-                    print(hex(input_key.getKey()['p']))
-                    print(hex(input_key.getKey()['q']))
-                    print(hex((input_key.getKey()['p']-1)*(input_key.getKey()['q']-1)))
-                    print(hex(input_key.getKey()['d']))
+                    print("Prime 1 : "+hex(input_key.getKey()['p']))
+                    print("Prime 2 : "+hex(input_key.getKey()['q']))
+                    print("Phi : "+hex((input_key.getKey()['p']-1)*(input_key.getKey()['q']-1)))
+                    print("Private exponant : "+hex(input_key.getKey()['d']))
             elif args.f == 'hexpair':
-                print(self.int_to_hexpair(input_key.getKey()['e']))
-                print(self.int_to_hexpair(input_key.getKey()['n']))
+                print("Exponant : "+self.int_to_hexpair(input_key.getKey()['e']))
+                print("Modulus : "+self.int_to_hexpair(input_key.getKey()['n']))
                 if isinstance(input_key, PrivateKey):
-                    print(self.int_to_hexpair(input_key.getKey()['p']))
-                    print(self.int_to_hexpair(input_key.getKey()['q']))
-                    print(self.int_to_hexpair((input_key.getKey()['p']-1)*(input_key.getKey()['q']-1)))
-                    print(self.int_to_hexpair(input_key.getKey()['d']))
+                    print("Prime 1 : "+self.int_to_hexpair(input_key.getKey()['p']))
+                    print("Prime 2 : "+self.int_to_hexpair(input_key.getKey()['q']))
+                    print("Phi : "+self.int_to_hexpair((input_key.getKey()['p']-1)*(input_key.getKey()['q']-1)))
+                    print("Private exponant : "+self.int_to_hexpair(input_key.getKey()['d']))
             else:
                 print('Wrong output format for printing, use -f with "dec", "hex" or "hexpair")')
             exit()
@@ -245,12 +249,118 @@ class RSAToolbox:
 
     def handle_cipher(self, args):
         return
+    
     def handle_decipher(self, args):
         return
+
     def handle_crack(self, args):
         return
+
     def handle_generate(self, args):
-        return
+        generate = None
+        if args.p != None and args.q != None and args.d != None:
+            if args.fi != None:
+                if args.fi == "dec":
+                    try:
+                        e = int(args.e)
+                        n = int(args.m)
+                        d = int(args.d)
+                        # TODO verify if private exponant modular inverse is correct
+                        p = int(args.p)
+                        q = int(args.q)
+                        if not self.isPrime(p) or not self.isPrime(q):
+                            raise RSAException("Wrong generators, p or/and q are not prime")
+                        generate = PrivateKey({"e":e, "n":n, "d":d, "p":p, "q":q})
+                    except ValueError:
+                        print("One or more of the input numbers are not in decimal format")
+                        exit()
+                elif args.fi == "hexpair":
+                    try:
+                        e = hexpair_to_int(args.e)
+                        n = hexpair_to_int(args.m)
+                        d = hexpair_to_int(args.d)
+                        p = hexpair_to_int(args.p)
+                        q = hexpair_to_int(args.q)
+                        if not self.isPrime(p) or not self.isPrime(q):
+                            raise RSAException("Wrong generators, p or/and q are not prime")
+                        generate = PrivateKey({"e":e, "n":n, "d":d, "p":p, "q":q})
+                    except ValueError:
+                        print("One or more of the input numbers are not in hexadecimal format")
+                        exit()
+                elif args.fi == "hex":
+                    try:
+                        e = int(args.e, 16)
+                        n = int(args.m, 16)
+                        d = int(args.d, 16)
+                        p = int(args.p, 16)
+                        q = int(args.q, 16)
+                        if not self.isPrime(p) or not self.isPrime(q):
+                            raise RSAException("Wrong generators, p or/and q are not prime")
+                        generate = PrivateKey({"e":e, "n":n, "d":d, "p":p, "q":q})
+                    except ValueError:
+                        print("One or more of the input numbers are not in hexadecimal format")
+                        exit()
+            else:
+                try:
+                    e = int(args.e)
+                    n = int(args.m)
+                    d = int(args.d)
+                    p = int(args.p)
+                    q = int(args.q)
+                    if not self.isPrime(p) or not self.isPrime(q):
+                        raise RSAException("Wrong generators, p or/and q are not prime")
+                    generate = PrivateKey({"e":e, "n":n, "d":d, "p":p, "q":q})
+                except ValueError:
+                    print("One or more of the input numbers are not in decimal format")
+                    exit()
+        else:
+            if args.fi != None:
+                if args.fi == "dec":
+                    try:
+                        e = int(args.e)
+                        n = int(args.m)
+                        generate = PublicKey({"e":e, "n":n})
+                    except ValueError:
+                        print("Exponant or modulus are not in decimal format")
+                        exit()
+                elif args.fi == "hexpair":
+                    try:
+                        e = hexpair_to_int(args.e)
+                        n = hexpair_to_int(args.m)
+                        generate = PublicKey({"e":e, "n":n})
+                    except ValueError:
+                        print("Exponant or modulus are not in hexadecimal format")
+                        exit()
+                elif args.fi == "hex":
+                    try:
+                        e = int(args.e, 16)
+                        n = int(args.m, 16)
+                        generate = PublicKey({"e":e, "n":n})
+                    except ValueError:
+                        print("Exponant or modulus are not in hexadecimal format")
+                        exit()
+            else:
+                try:
+                    e = int(args.e)
+                    n = int(args.m)
+                    generate = PublicKey({"e":e, "n":n})
+                except ValueError:
+                    print("Exponant or modulus are not in decimal format")
+                    exit()
+
+        if args.f == "pkcs8" or args.f == "ssh" or args.f == "pkcs1":
+            if args.o != None:
+                f_write = open(args.o, 'w+')
+                if (args.f == "pkcs1" or args.f == "pkcs8") and isinstance(generate, PublicKey):
+                    f_write.write(generate.export("pkcs"))
+                else:
+                    f_write.write(generate.export(args.f))
+                f_write.close()
+            else:
+                if (args.f == "pkcs1" or args.f == "pkcs8") and isinstance(generate, PublicKey):
+                    print(generate.export("pkcs"))
+                else:
+                    print(generate.export(args.f))
 
 def is_valid_file(parser, arg):
     if not os.path.exists(arg):
@@ -292,6 +402,7 @@ def args():
     parser_list.add_argument('-qs', action="store_true", help="input stdin or file")
     parser_list.add_argument('-a', action="store_true", help="input stdin or file")
     parser_list = subparser.add_parser('generate')
+    parser_list.add_argument('-fi', action="store", choices=['dec', 'hex', 'hexpair'], help="input data format")
     parser_list.add_argument('-o', action="store", help="output key file destination")
     parser_list.add_argument('-m', action="store", required=True, help="input modulus for export")
     parser_list.add_argument('-e', action="store", required=True, help="input exponant from key")
