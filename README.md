@@ -9,14 +9,7 @@ hotspot.sh : create a wifi p2p hotspot
 
 radio.sh : turn on FM radio for rtl-sdr dongle
 
-remote_control.py : mini UDP server to change tv channel on tv server
-
 set_screen.sh : set the screen in low consumption
-
-start_tv : send the channel to the UDP server to set the tv channel
-
-tv : open dvblast to start broadcasting a specified channel (settings will like frequency will be different according to
-geographical zone)
 
 update_kernel.sh : update kernel for minor revisions from kernel.org
 

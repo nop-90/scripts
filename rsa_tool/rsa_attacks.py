@@ -17,52 +17,193 @@ this stuff is worth it, you can buy me a beer in return.
 from Crypto.PublicKey import RSA
 import signal
 import gmpy
-from libnum import *
 import requests
 import re
 import argparse
 import os
 import subprocess
 from glob import glob
+from bs4 import BeautifulSoup
+import sys
+from sympy.solvers import solve
+from sympy import Symbol, primerange
 
-class RSAAttack(object):
-    def __init__(self, args):
-        if '*' in args.publickey or '?' in args.publickey:
-            # get list of public keys from wildcard expression
-            self.pubkeyfilelist = glob(args.publickey)
-            self.args = args
+from rsa_convert import *
 
-            if args.verbose:
-                print "[*] Multikey mode using keys: " + repr(self.pubkeyfilelist)
+class FactorizationError(Exception):
+    pass
 
-            # Initialize a list of objects by recursively calling this on each key
-            self.attackobjs = []
-            for pub in self.pubkeyfilelist:
-                args.publickey = pub  # is this a kludge or is this elegant?
-                self.attackobjs.append(RSAAttack(args))
+def isqrt(n):
+  x = n
+  y = (x + n // x) // 2
+  while y < x:
+    x = y
+    y = (x + n // x) // 2
+  return x
+
+def fermat(n):
+    a = isqrt(n)
+    b2 = a*a - n
+    b = isqrt(n)
+    count = 0
+    while b*b != b2:
+        a = a + 1
+        b2 = a*a - n
+        b = isqrt(b2)
+        count += 1
+    p=a+b
+    q=a-b
+    assert n == p * q
+    return p, q
+
+# A reimplementation of pablocelayes rsa-wiener-attack for this purpose
+# https://github.com/pablocelayes/rsa-wiener-attack/
+class WienerAttack(object):
+    def rational_to_contfrac (self, x, y):
+        a = x//y
+        if a * y == x:
+            return [a]
         else:
-            # Load single public key
-            key = open(args.publickey, 'rb').read()
-            self.pubkeyfile = args.publickey
-            self.pub_key = PublicKey(key)
-            self.priv_key = None
-            self.displayed = False   # have we already spammed the user with this private key?
-            self.args = args
-            self.unciphered = None
-            self.attackobjs = None  # This is how we'll know this object represents 1 key
+            pquotients = self.rational_to_contfrac(y, x - a * y)
+            pquotients.insert(0, a)
+            return pquotients
 
-            # Test if sage is working and if so, load additional sage based attacks
-            if args.sageworks:
-                self.implemented_attacks.append(self.smallfraction)
-                self.implemented_attacks.append(self.boneh_durfee)
-                self.implemented_attacks.append(self.ecm)           # make sure ECM always comes last!
+    def convergents_from_contfrac(self, frac):
+        convs = [];
+        for i in range(len(frac)):
+            convs.append(self.contfrac_to_rational(frac[0:i]))
+        return convs
 
-            # Load ciphertext
-            if args.uncipher is not None:
-                self.cipher = open(args.uncipher, 'rb').read().strip()
+    def contfrac_to_rational (self, frac):
+        if len(frac) == 0:
+            return (0,1)
+        elif len(frac) == 1:
+            return (frac[0], 1)
+        else:
+            remainder = frac[1:len(frac)]
+            (num, denom) = self.contfrac_to_rational(remainder)
+            return (frac[0] * num + denom, num)
+
+    def is_perfect_square(self, n):
+        h = n & 0xF;
+        if h > 9:
+            return -1
+
+        if ( h != 2 and h != 3 and h != 5 and h != 6 and h != 7 and h != 8 ):
+            t = self.isqrt(n)
+            if t*t == n:
+                return t
             else:
-                self.cipher = None
+                return -1
+
+        return -1
+
+    def isqrt(self, n):
+        if n == 0:
+            return 0
+        a, b = divmod(n.bit_length(), 2)
+        x = 2**(a+b)
+        while True:
+            y = (x + n//x)//2
+            if y >= x:
+                return x
+            x = y
+
+
+    def __init__(self, n, e):
+        self.d = None
+        self.p = None
+        self.q = None
+        sys.setrecursionlimit(100000)
+        frac = self.rational_to_contfrac(e, n)
+        convergents = self.convergents_from_contfrac(frac)
+
+        for (k,d) in convergents:
+            if k!=0 and (e*d-1)%k == 0:
+                phi = (e*d-1)//k
+                s = n - phi + 1
+                discr = s*s - 4*n
+                if(discr>=0):
+                    t = self.is_perfect_square(discr)
+                    if t!=-1 and (s+t)%2==0:
+                        self.d = d
+                        x = Symbol('x')
+                        roots = solve(x**2 - s*x + n, x)
+                        if len(roots) == 2:
+                            self.p = roots[0]
+                            self.q = roots[1]
+                        break
+
+class SiqsAttack(object):
+    def __init__(self, n):
+        # Configuration
+        self.yafubin = "./yafu" # where the binary is
+        self.threads = 2       # number of threads
+        self.maxtime = 180     # max time to try the sieve
+
+        self.n = n
+        self.p = None
+        self.q = None
+        self.verbose = False
+
+    def testyafu(self):
+        with open('/dev/null') as DN:
+            try:
+                yafutest = subprocess.check_output([self.yafubin,'siqs(1549388302999519)'], stderr=DN)
+            except:
+                yafutest = ""
+
+        if '48670331' in yafutest:
+            return True
+        else:
+            return False
+
+
+    def checkyafu(self):
+        # check if yafu exists and we can execute it
+        if os.path.isfile(self.yafubin) and os.access(self.yafubin, os.X_OK):
+            return True
+        else:
+            return False
+
+    def benchmarksiqs(self):
+        # NYI
+        # return the time to factor a 256 bit RSA modulus
         return
+
+    def doattack(self):
+        with open('/dev/null') as DN:
+            yafurun = subprocess.check_output(
+                [self.yafubin,'siqs('+str(self.n)+')',
+                 '-siqsT',  str(self.maxtime),
+                 '-threads',str(self.threads)], stderr=DN)
+
+            primesfound = []
+
+            if 'input too big for SIQS' in yafurun:
+                raise FactorizationError('input too big for SIQS')
+
+            for line in yafurun.splitlines():
+                if re.search('^P[0-9]+\ =\ [0-9]+$',line):
+                    primesfound.append(int(line.split('=')[1]))
+
+            if len(primesfound) == 2:
+                self.p = primesfound[0]
+                self.q = primesfound[1]
+
+            if len(primesfound) > 2:
+                raise FactorizationError("> 2 primes found. Is key multiprime?")
+
+            if len(primesfound) < 2:
+                raise("SIQS did not factor modulus")
+
+        return
+
+class RSAAttack:
+    pub_key = {}
+
+    def __init__(self, pubkey):
+        self.pub_key = pubkey
 
     def hastads(self):
         # Hastad attack for low public exponent, this has found success for e = 3, and e = 5 previously
@@ -86,16 +227,14 @@ class RSAAttack(object):
                 eq = map(int, [k,j,sub])
                 return pow(eq[0],eq[1])-eq[2]
             except Exception as e:
-                if self.args.verbose:
-                    print "[*] FactorDB gave something we couldn't parse sorry (%s). Got error: %s" % (equation,e)
-                raise FactorizationError()
+                raise FactorizationError("Unable to compute equation from factordb")
 
         # Factors available online?
         try:
             url_1 = 'http://www.factordb.com/index.php?query=%i'
             url_2 = 'http://www.factordb.com/index.php?id=%s'
             s = requests.Session()
-            r = s.get(url_1 % self.pub_key.n)
+            r = s.get(url_1 % self.pub_key['n'])
             regex = re.compile("index\.php\?id\=([0-9]+)", re.IGNORECASE)
             ids = regex.findall(r.text)
             p_id = ids[1]
@@ -106,39 +245,89 @@ class RSAAttack(object):
             r_2 = s.get(url_2 % q_id)
             key_p = regex.findall(r_1.text)[0]
             key_q = regex.findall(r_2.text)[0]
-            self.pub_key.p = int(key_p) if key_p.isdigit() else solveforp(key_p)
-            self.pub_key.q = int(key_q) if key_q.isdigit() else solveforp(key_q)
-            if self.pub_key.p == self.pub_key.q == self.pub_key.n:
+            p = int(key_p) if key_p.isdigit() else solveforp(key_p)
+            q = int(key_q) if key_q.isdigit() else solveforp(key_q)
+            if p == q == self.pub_key['n']:
                 raise FactorizationError()
-            self.priv_key = PrivateKey(long(self.pub_key.p), long(self.pub_key.q),
-                                       long(self.pub_key.e), long(self.pub_key.n))
-            return
+            self.priv_key = PrivateKey({"p":p, "q":q, "e":self.pub_key['e'], "n":self.pub_key['n']})
+            return self.priv_key
         except Exception as e:
-            return
+            raise FactorizationError("Unable to find factors online")
 
     def wiener(self):
-        # this attack module can be optional based on sympy and wiener_attack.py existing
-        try:
-            from wiener_attack import WienerAttack
-        except ImportError:
-            if self.args.verbose:
-                print "[*] Warning: Wiener attack module missing (wiener_attack.py) or SymPy not installed?"
-            return
-
         # Wiener's attack
-        wiener = WienerAttack(self.pub_key.n, self.pub_key.e)
+        wiener = WienerAttack(self.pub_key['n'], self.pub_key['e'])
         if wiener.p is not None and wiener.q is not None:
-            self.pub_key.p = wiener.p
-            self.pub_key.q = wiener.q
-            self.priv_key = PrivateKey(long(self.pub_key.p), long(self.pub_key.q),
-                                       long(self.pub_key.e), long(self.pub_key.n))
+            self.priv_key = PrivateKey({'p': int(wiener.p), 'q':int(wiener.q), 'e': self.pub_key['e'], 'n': self.pub_key['n']})
+        else:
+            raise FactorizationError("Unable to use Weiner attack on this key")
+        return self.priv_key
+
+    def smallp(self):
+        # Try an attack where q < 100,000, from BKPCTF2016 - sourcekris
+        for prime in list(primerange(0, 100000)):
+            if self.pub_key['n'] % prime == 0:
+                q = prime
+                p = self.pub_key['n'] / q
+                self.priv_key = PrivateKey({'p':int(p), 'q':int(q), 'e':self.pub_key['e'], 'n':self.pub_key['n']})
+        return self.priv_key
+
+    def fermat(self, fermat_timeout=60):
+        # Try an attack where the primes are too close together from BKPCTF2016 - sourcekris
+        # this attack module can be optional
+        with timeout(seconds=fermat_timeout):
+            p,q = fermat(self.pub_key['n'])
+
+        if q is not None:
+           self.priv_key = PrivateKey({'p':p, 'q':q, 'e':self.pub_key['e'], 'n':self.pub_key['n']})
+
+        return self.priv_key
+
+    def siqs(self):
+        # attempt a Self-Initializing Quadratic Sieve
+        if self.pub_key['n'].bit_length() > 1024:
+            raise FactorizationError("Modulus too large for SIQS attack module")
+
+        siqsobj = SiqsAttack(self.pub_key['n'])
+
+        if siqsobj.checkyafu() and siqsobj.testyafu():
+            siqsobj.doattack()
+
+        if siqsobj.p and siqsobj.q:
+            return PrivateKey({'p': siqsobj.p, 'q':siqsobj.q, "e": self.pub_key['e'], "n": self.pub_key['n']})
+        else:
+            raise FactorizationError("Modulus not found")
+
+"""
+    def commonfactors(self):
+        # Try to find the gcd between each pair of modulii and resolve the private keys if gcd > 1
+        for x in self.attackobjs:
+            for y in self.attackobjs:
+                if x.pub_key.n != y.pub_key.n:
+                    g = gcd(x.pub_key.n, y.pub_key.n)
+                    if g != 1:
+                        if self.args.verbose and not x.displayed and not y.displayed:
+                            print("[*] Found common factor in modulus for " + x.pubkeyfile + " and " + y.pubkeyfile)
+
+                        # update each attackobj with a private_key
+                        x.pub_key.p = g
+                        x.pub_key.q = x.pub_key.n / g
+                        y.pub_key.p = g
+                        y.pub_key.q = y.pub_key.n / g
+                        x.priv_key = PrivateKey(long(x.pub_key.p),long(x.pub_key.q),
+                                                long(x.pub_key.e), long(x.pub_key.n))
+                        y.priv_key = PrivateKey(long(y.pub_key.p), long(y.pub_key.q),
+                                                long(y.pub_key.e), long(y.pub_key.n))
+
+                    # call attack method to print the private keys at the nullattack step or attack singularly
+                    # depending on the success of the gcd operation
+                    x.attack()
+                    y.attack()
 
         return
-
     def ecm(self):
         # use elliptic curve method, may return a prime or may never return
         # only works if the sageworks() function returned True
-        print "[*] ECM Method can run forever and may never succeed. Hit Ctrl-C to bail out."
         if self.args.ecmdigits:
             sageresult = int(subprocess.check_output(['sage', 'ecm.sage', str(self.pub_key.n),str(self.args.ecmdigits)]))
         else:
@@ -170,16 +359,6 @@ class RSAAttack(object):
 
         return
 
-    def smallq(self):
-        # Try an attack where q < 100,000, from BKPCTF2016 - sourcekris
-        for prime in primes(100000):
-            if self.pub_key.n % prime == 0:
-                self.pub_key.q = prime
-                self.pub_key.p = self.pub_key.n / self.pub_key.q
-                self.priv_key = PrivateKey(long(self.pub_key.p), long(self.pub_key.q),
-                                           long(self.pub_key.e), long(self.pub_key.n))
-        return
-
     def smallfraction(self):
         # Code/idea from Renaud Lifchitz's talk 15 ways to break RSA security @ OPCDE17
         # only works if the sageworks() function returned True
@@ -189,28 +368,6 @@ class RSAAttack(object):
             self.pub_key.q = self.pub_key.n / self.pub_key.p
             self.priv_key = PrivateKey(long(self.pub_key.p), long(self.pub_key.q),
                                        long(self.pub_key.e), long(self.pub_key.n))
-        return
-
-    def fermat(self, fermat_timeout=60):
-        # Try an attack where the primes are too close together from BKPCTF2016 - sourcekris
-        # this attack module can be optional
-        try:
-            from fermat import fermat
-        except ImportError:
-            if self.args.verbose:
-                print "[*] Warning: Fermat factorization module missing (fermat.py)"
-            return
-
-        try:
-            with timeout(seconds=fermat_timeout):
-                self.pub_key.p, self.pub_key.q = fermat(self.pub_key.n)
-        except FactorizationError:
-            return
-
-        if self.pub_key.q is not None:
-           self.priv_key = PrivateKey(long(self.pub_key.p), long(self.pub_key.q),
-                                      long(self.pub_key.e), long(self.pub_key.n))
-
         return
 
     def noveltyprimes(self):
@@ -238,33 +395,6 @@ class RSAAttack(object):
                                            long(self.pub_key.e), long(self.pub_key.n))
 
                 unciphered = self.priv_key.decrypt(self.cipher)
-
-        return
-
-    def commonfactors(self):
-        # Try to find the gcd between each pair of modulii and resolve the private keys if gcd > 1
-        for x in self.attackobjs:
-            for y in self.attackobjs:
-                if x.pub_key.n <> y.pub_key.n:
-                    g = gcd(x.pub_key.n, y.pub_key.n)
-                    if g != 1:
-                        if self.args.verbose and not x.displayed and not y.displayed:
-                            print "[*] Found common factor in modulus for " + x.pubkeyfile + " and " + y.pubkeyfile
-
-                        # update each attackobj with a private_key
-                        x.pub_key.p = g
-                        x.pub_key.q = x.pub_key.n / g
-                        y.pub_key.p = g
-                        y.pub_key.q = y.pub_key.n / g
-                        x.priv_key = PrivateKey(long(x.pub_key.p),long(x.pub_key.q),
-                                                long(x.pub_key.e), long(x.pub_key.n))
-                        y.priv_key = PrivateKey(long(y.pub_key.p), long(y.pub_key.q),
-                                                long(y.pub_key.e), long(y.pub_key.n))
-
-                    # call attack method to print the private keys at the nullattack step or attack singularly
-                    # depending on the success of the gcd operation
-                    x.attack()
-                    y.attack()
 
         return
 
@@ -354,8 +484,7 @@ class RSAAttack(object):
             else:
                 if self.args.uncipher is not None:
                     print "[-] Sorry, cracking failed"
-
-    implemented_attacks = [ nullattack, hastads, factordb, pastctfprimes, noveltyprimes, smallq, wiener, comfact_cn, fermat, siqs ]
+"""
 
 # source http://stackoverflow.com/a/22348885
 class timeout:
@@ -401,33 +530,3 @@ if __name__ == "__main__":
     parser.add_argument('--key', help='Specify the input key file in --dumpkey mode.')
 
     args = parser.parse_args()
-
-    # if createpub mode generate public key then quit
-    if args.createpub:
-        if args.n is None or args.e is None:
-            raise Exception("Specify both a modulus and exponent on the command line. See --help for info.")
-        print RSA.construct((args.n, args.e)).publickey().exportKey()
-        quit()
-
-    # if dumpkey mode dump the key components then quit
-    if args.dumpkey:
-        if args.key is None:
-            raise Exception("Specify a key file to dump with --key. See --help for info.")
-
-        key_data = open(args.key,'rb').read()
-        key = RSA.importKey(key_data)
-        print "[*] n: " + str(key.n)
-        print "[*] e: " + str(key.e)
-        if key.has_private():
-            print "[*] d: " + str(key.d)
-            print "[*] p: " + str(key.p)
-            print "[*] q: " + str(key.q)
-        quit()
-
-    if sageworks():
-        args.sageworks = True
-    else:
-        args.sageworks = False
-
-    attackobj = RSAAttack(args)
-    attackobj.attack()

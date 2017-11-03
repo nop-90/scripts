@@ -20,6 +20,20 @@ def parse_DER(der):
     n = eval('0x' + ''.join(['%02X' % x for x in parts[2]]))
     return {"e":e, "n":n}
 
+def egcd(a, b):
+    if a == 0:
+        return (b, 0, 1)
+    else:
+        g, y, x = egcd(b % a, a)
+        return (g, x - (b // a) * y, y)
+
+def modinv(a, m):
+    g, x, y = egcd(a, m)
+    if g != 1:
+        raise RSAException('Modular inverse does not exist')
+    else:
+        return x % m
+
 class RSAException(Exception):
     pass
 
@@ -46,17 +60,29 @@ class PrivateKey:
                 if passphrase != "":
                     self.passphrase = passphrase
         elif isinstance(file_src, dict):
-            if 'e' in file_src and 'n' in file_src and 'p' in file_src and 'q' in file_src and 'd' in file_src:
-                self.pk_object = file_src
+            if 'e' in file_src and 'n' in file_src and 'p' in file_src and 'q' in file_src:
+                if isinstance(file_src['e'], int) and isinstance(file_src['p'], int) and \
+                    isinstance(file_src['q'], int) and isinstance(file_src['n'], int):
+                    self.pk_object = file_src
+                    if 'd' not in file_src:
+                        try:
+                            self.pk_object['d'] = modinv(self.pk_object['e'], self.getPhi())
+                        except RSAException as e:
+                            print(e.getMessage())
+                else:
+                    raise PrivException("A variable in the private key object is not a number")
             else:
-                raise PubException("Object is not a correct private key")
+                raise PrivException("Object is not a correct private key (must have e,p,q,n)")
         else:
-            raise PubException("Argument is not a file path or a private key object")
+            raise PrivException("Argument is not a file path or a private key object")
+
+    def getPhi(self):
+        return self.pk_object['p']*self.pk_object['q']
 
     def getKey(self):
         return self.pk_object
 
-    def raiseExFunction():
+    def raiseExFunction(self):
         raise PrivException("Conversion from "+self.pk_type+" to "+input_key_type+" not supported")
 
     def convert(self, input_key_type):
@@ -72,7 +98,7 @@ class PrivateKey:
             self.pk_type = "pkcs1"
             self.pk_object = self.pkcs1_privkey_reading()
         # PKCS8
-        elif header[0:37] == '-----BEGIN ENCRYPTED PRIVATE KEY-----':
+        elif header[0:37] == '-----BEGIN ENCRYPTED PRIVATE KEY-----'  or '-----BEGIN PRIVATE KEY-----':
             self.pk_type = "pkcs8"
             self.pk_object = self.pkcs8_privkey_reading()
         # OpenSSH

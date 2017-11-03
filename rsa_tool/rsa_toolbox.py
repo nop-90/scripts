@@ -1,9 +1,10 @@
 #!/usr/bin/python3
 from bs4 import BeautifulSoup
 from Crypto.PublicKey import RSA
-from Crypto.Cipher import PKCS1_v1_5
+from Crypto.Cipher import PKCS1_OAEP
 from Crypto.Hash import SHA
 from Crypto.Cipher import AES
+import base64
 import urllib.request
 import sys
 import subprocess
@@ -13,6 +14,7 @@ import os.path
 import getpass
 
 from rsa_convert import *
+from rsa_attacks import *
 
 def main():
     args()
@@ -162,7 +164,7 @@ class RSAToolbox:
         elif args.b:
             # TODO
             pass
-        elif args.a:
+        else:
             if args.f == 'dec' or args.f == None:
                 print("Exponant : "+str(input_key.getKey()['e']))
                 print("Modulus : "+str(input_key.getKey()['n']))
@@ -248,12 +250,161 @@ class RSAToolbox:
                 print(output_key)
 
     def handle_cipher(self, args):
-        return
-    
+        if args.ic != None:
+            input_key = PublicKey(args.ic).getKey()
+            cipher = PKCS1_OAEP.new(RSA.construct((input_key['n'],input_key['e'])))
+
+            if args.i == "-":
+                data = sys.stdin.read()
+            else:
+                try:
+                    data = open(args.i, 'r').read()
+                except IOError:
+                    print("Input file not found")
+                    exit()
+            try:
+                message = cipher.encrypt(data.encode('utf-8'))
+            except ValueError as e:
+                print("Your key size is too small to encode this text with RSA (try increasing the modulus length)")
+
+            if args.o != None:
+                try:
+                    output = open(args.o, 'w')
+                    output.write(base64.b64encode(message).decode('utf-8'))
+                    output.close()
+                except IOError:
+                    print("Output file could not be created")
+                    exit()
+            else:
+                print(base64.b64encode(message).decode('utf-8'))
+
+            """
+                AES
+                aeskey = Random.new().read(24)
+                iv = Random.new().read(AES.block_size)
+                cipher_aes = AES.new(aeskey, AES.MODE_CBC, iv)
+                msg = iv + cipher_aes.encrypt(data)
+
+                random_gen = Random.new().read
+                ciphertext = cipher.encrypt(aeskey)
+                return [':'.join([hex(int(cipherbit)).replace('0x','') for bit in ciphertext]),':'.join([hex(int(text_bit)).replace('0x','') for text_bit in msg])]
+            """
+
     def handle_decipher(self, args):
-        return
+        if args.ic != None:
+            input_key = PrivateKey(args.ic).getKey()
+            decipher = PKCS1_OAEP.new(RSA.construct((input_key['n'],input_key['e'],input_key['d'],input_key['p'],input_key['q'])))
+
+            if args.i == '-':
+                data = sys.stdin.read()
+            else:
+                try:
+                    data = base64.b64decode(open(args.i, 'r').read())
+                except IOError:
+                    print("Input file not found")
+                    exit()
+            try:
+                message = decipher.decrypt(data)
+                if args.o != None:
+                    try:
+                        output = open(args.o, 'w')
+                        output.write(message)
+                        output.close()
+                    except IOError:
+                        print("Output file could not be created")
+                        exit()
+                else:
+                    print(message)
+            except Exception as e:
+                print(e)
+                exit()
 
     def handle_crack(self, args):
+        input_key = PublicKey(args.i).getKey()
+        decrypt = RSAAttack(input_key)
+        if args.fac:
+            priv_key_found = decrypt.factordb()
+            key_str = priv_key_found.getKey()
+            if args.o != None:
+                if args.of != None:
+                    try:
+                        output = open(args.o, "w")
+                        output.write(priv_key_found.export(args.of))
+                        output.close()
+                    except IOError:
+                        print("Output key file could not be created")
+                        exit()
+                else:
+                    print("Output private key format was not specified")
+            else:
+                print(key_str)
+        elif args.w:
+            priv_key_found = decrypt.wiener()
+            key_str = priv_key_found.getKey()
+            if args.o != None:
+                if args.of != None:
+                    try:
+                        output = open(args.o, "w")
+                        output.write(priv_key_found.export(args.of))
+                        output.close()
+                    except IOError:
+                        print("Output key file could not be created")
+                        exit()
+                else:
+                    print("Output private key format was not specified")
+            else:
+                print(key_str)
+        elif args.sp:
+            priv_key_found = decrypt.smallp()
+            key_str = priv_key_found.getKey()
+            if args.o != None:
+                if args.of != None:
+                    try:
+                        output = open(args.o, "w")
+                        output.write(priv_key_found.export(args.of))
+                        output.close()
+                    except IOError:
+                        print("Output key file could not be created")
+                        exit()
+                else:
+                    print("Output private key format was not specified")
+            else:
+                print(key_str)
+        elif args.fer:
+            priv_key_found = decrypt.fermat()
+            key_str = priv_key_found.getKey()
+            if args.o != None:
+                if args.of != None:
+                    try:
+                        output = open(args.o, "w")
+                        output.write(priv_key_found.export(args.of))
+                        output.close()
+                    except IOError:
+                        print("Output key file could not be created")
+                        exit()
+                else:
+                    print("Output private key format was not specified")
+            else:
+                print(key_str)
+        elif args.qs:
+            priv_key_found = decrypt.siqs()
+            key_str = priv_key_found.getKey()
+            if args.o != None:
+                if args.of != None:
+                    try:
+                        output = open(args.o, "w")
+                        output.write(priv_key_found.export(args.of))
+                        output.close()
+                    except IOError:
+                        print("Output key file could not be created")
+                        exit()
+                else:
+                    print("Output private key format was not specified")
+            else:
+                print(key_str)
+        elif args.a:
+            # TODO
+            pass
         return
 
     def handle_generate(self, args):
@@ -388,19 +539,21 @@ def args():
     parser_list = subparser.add_parser('cipher')
     parser_list.add_argument('-o', action="store", help="output file")
     parser_list.add_argument('-ic', action="store", required=True, help="input key file", type=lambda x: is_valid_file(parser, x))
-    parser_list.add_argument('-i', action="store", help="input file", type=lambda x: is_valid_file(parser, x))
+    parser_list.add_argument('-i', action="store", help="input file")
     parser_list = subparser.add_parser('decipher')
     parser_list.add_argument('-o', action="store", help="output file")
     parser_list.add_argument('-ic', action="store", required=True, help="input private key file", type=lambda x: is_valid_file(parser, x))
-    parser_list.add_argument('-i', action="store", help="input file", type=lambda x: is_valid_file(parser, x))
+    parser_list.add_argument('-i', action="store", required=True, help="input file")
     parser_list = subparser.add_parser('crack')
-    parser_list.add_argument('-fac', action="store_true", help="output file or stdout")
-    parser_list.add_argument('-w', action="store_true", help="input private key file")
-    parser_list.add_argument('-sp', action="store_true", help="input stdin or file")
-    parser_list.add_argument('-fer', action="store_true", help="output file or stdout")
-    parser_list.add_argument('-com', action="store_true", help="input private key file")
-    parser_list.add_argument('-qs', action="store_true", help="input stdin or file")
-    parser_list.add_argument('-a', action="store_true", help="input stdin or file")
+    parser_list.add_argument('-i', action="store", help="input key file", required=True, type=lambda x: is_valid_file(parser,x))
+    parser_list.add_argument('-fac', action="store_true", help="inspect for known factor")
+    parser_list.add_argument('-w', action="store_true", help="inspect for wiener vulnerability")
+    parser_list.add_argument('-sp', action="store_true", help="inspect for small prime factorization")
+    parser_list.add_argument('-fer', action="store_true", help="inspect for fermat factorization")
+    parser_list.add_argument('-qs', action="store_true", help="try factorizing with Self-Initializing Quadratic Sieve")
+    parser_list.add_argument('-a', action="store_true", help="try all attacks")
+    parser_list.add_argument('-o', action="store", help="output private key file")
+    parser_list.add_argument('-of', action="store", help="output private key file format", choices=['pkcs8', 'pkcs1', 'ssh'])
     parser_list = subparser.add_parser('generate')
     parser_list.add_argument('-fi', action="store", choices=['dec', 'hex', 'hexpair'], help="input data format")
     parser_list.add_argument('-o', action="store", help="output key file destination")
@@ -421,25 +574,7 @@ def get_prime(bits):
 
 def encrypt(data,e,n,cipher):
     key = RSA.construct((n,e))
-    cipher = PKCS1_v1_5.new(key)
 
-    if cipher == 'RSA':
-        try:
-            message = cipher.encrypt(data.encode('utf-8'))
-        except ValueError as e:
-            print("Your key size is too small to encode this text with RSA (try increasing the modulus length)")
-        return ':'.join([hex(int(msg)).replace('0x','') for msg in message])
-    elif cipher == 'AES':
-        aeskey = Random.new().read(24)
-        iv = Random.new().read(AES.block_size)
-        cipher_aes = AES.new(aeskey, AES.MODE_CBC, iv)
-        msg = iv + cipher_aes.encrypt(data)
-
-        random_gen = Random.new().read
-        ciphertext = cipher.encrypt(aeskey)
-        return [':'.join([hex(int(cipherbit)).replace('0x','') for bit in ciphertext]),':'.join([hex(int(text_bit)).replace('0x','') for text_bit in msg])]
-    else:
-        print(str(cipher)+" is not supported")
 
 def decrypt(data,e,d,n,cipher):
     key = RSA.construct((n,d,e))
@@ -472,28 +607,6 @@ def decrypt(data,e,d,n,cipher):
         return message
     else:
         print(str(cipher)+" is not supported")
-
-def get_prime_factor(factoring):
-    prime_factors = []
-    with urllib.request.urlopen("http://factordb.com/index.php?query="+factoring) as req:
-        html = BeautifulSoup(req.read(), "html.parser")
-        td = html.findAll("table")[1].findAll('tr')[2].findAll('td')[2].findAll("a")
-
-        index = 0
-        for number in td:
-            if index == 0:
-                print("Source number : "+sys.argv[1])
-            else:
-                prime = number.find('font').get_text()
-                if re.search("\^", prime):
-                    base = int(prime.split('^')[0])
-                    power = int(prime.split('^')[1])
-                    for i in range(0, power):
-                        prime_factors.append(base)
-                else:
-                    prime_factors.append(int(prime))
-            index += 1
-    return prime_factors
 
 if __name__ == "__main__":
     main()

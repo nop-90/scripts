@@ -1,11 +1,10 @@
 # RSA toolbox :
     - Test every output
     - Wrong inputs protection
-    - Finish argument handling with new method
+    - Catch all exceptions
+    - Cipher/decipher RSA text
+    - Handle AES cipher with rsa key
     - Read DH parameters
-    - Detect weak keys (fermat primes, wiener attack, common factor keys, factordb.com vulnerable)
-    - Factor with yafu
-    - Cipher with AES
 # GPT :
     - Wrong inputs protection
     - Test
