@@ -57,13 +57,15 @@ class PrivateKey:
                 self.file_src = file_src
                 self.pk_content = open(self.file_src).read()
                 self.init_privkey()
-                if passphrase != "":
-                    self.passphrase = passphrase
+            else:
+                raise PrivException("Private key file not found")
         elif isinstance(file_src, dict):
             if 'e' in file_src and 'n' in file_src and 'p' in file_src and 'q' in file_src:
                 if isinstance(file_src['e'], int) and isinstance(file_src['p'], int) and \
                     isinstance(file_src['q'], int) and isinstance(file_src['n'], int):
                     self.pk_object = file_src
+                    if passphrase != "":
+                        self.passphrase = passphrase
                     if 'd' not in file_src:
                         try:
                             self.pk_object['d'] = modinv(self.pk_object['e'], self.getPhi())
@@ -77,7 +79,7 @@ class PrivateKey:
             raise PrivException("Argument is not a file path or a private key object")
 
     def getPhi(self):
-        return self.pk_object['p']*self.pk_object['q']
+        return (self.pk_object['p']-1)*(self.pk_object['q']-1)
 
     def getKey(self):
         return self.pk_object
@@ -98,7 +100,7 @@ class PrivateKey:
             self.pk_type = "pkcs1"
             self.pk_object = self.pkcs1_privkey_reading()
         # PKCS8
-        elif header[0:37] == '-----BEGIN ENCRYPTED PRIVATE KEY-----'  or '-----BEGIN PRIVATE KEY-----':
+        elif header[0:37] == '-----BEGIN ENCRYPTED PRIVATE KEY-----'  or header[0:27]  == '-----BEGIN PRIVATE KEY-----':
             self.pk_type = "pkcs8"
             self.pk_object = self.pkcs8_privkey_reading()
         # OpenSSH
@@ -203,8 +205,7 @@ class PublicKey:
                     self.pk_content = open(self.file_src).read()
                     self.init_pubkey()
             else:
-                self.pk_content = file_src
-                self.init_pubkey()
+                raise PubException("Public key file was not found")
         elif isinstance(file_src, dict):
             if 'e' in file_src and 'n' in file_src:
                 self.pk_object = file_src

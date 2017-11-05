@@ -149,15 +149,15 @@ class RSAToolbox:
         elif args.phi:
             if isinstance(input_key, PrivateKey):
                 if args.f == 'dec' or args.f == None:
-                    print(str((input_key.getKey()['p']-1)*(input_key.getKey()['q']-1)))
+                    print(str(input_key.getPhi()))
                 elif args.f == 'hex':
-                    print(hex((input_key.getKey()['p']-1)*(input_key.getKey()['q']-1)))
+                    print(hex(input_key.getPhi()))
                 elif args.f == 'hexpair':
-                    print(self.int_to_hexpair((input_key.getKey()['p']-1)*(input_key.getKey()['q']-1)))
+                    print(self.int_to_hexpair(input_key.getPhi()))
                 else:
                     print('Wrong output format for printing, use -f with "dec", "hex" or "hexpair")')
                     exit()
-                print('phi : '+(input_key.getKey()['p']-1)*(input_key.getKey()['q']-1))
+                print('phi : '+input_key.getPhi())
             else:
                 print('Not a private key')
             exit()
@@ -308,13 +308,13 @@ class RSAToolbox:
                 if args.o != None:
                     try:
                         output = open(args.o, 'w')
-                        output.write(message)
+                        output.write(message.decode('utf-8'))
                         output.close()
                     except IOError:
                         print("Output file could not be created")
                         exit()
                 else:
-                    print(message)
+                    print(message.decode('utf-8'))
             except Exception as e:
                 print(e)
                 exit()
