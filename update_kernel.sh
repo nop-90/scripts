@@ -2,77 +2,84 @@
 echo "Outil de mise à jour du noyau - Paramètres : update_kernel.sh \"nouvelle version du noyau\""
 echo "Démarrer en droit root"
 cd /usr/src/linux
-if [ -z $1 ]
-then
-	echo "Nouvelle version du noyau :"
-	read version
-else
-	version=$1
+current_ver=$(uname -r)
+current_ver=${current_ver%-nop-90}
+echo "Current version : $current_ver"
+IFS='.' read -r -a current <<< $current_ver
+cp .config ../config-${current[0]}.${current[1]}
+
+if [ -z $1 ]; then
+    echo "Updating to latest version"
+    # Recherche de la dernière version
+    latest_ver=$(python -c 'import json; import requests; print(json.loads(requests.get("https://www.kernel.org/releases.json").text)["latest_stable"]["version"])')
+    if [ $latest_ver == "" ]; then
+        exit
+    fi
+    echo "Latest version : $latest_ver"
+    # Détermination de l'écart et téléchargement des patchs incrémentaux
+    IFS='.' read -r -a latest <<< $latest_ver
+    
+    # Vars containing each part of version numbers
+    maj_cur=${current[0]#0}
+    med_cur=${current[1]#0}
+    min_cur=${current[2]}
+    maj_lat=${latest[0]#0}
+    med_lat=${latest[1]#0}
+    min_lat=${latest[2]}
+
+    if [ $maj_lat -gt $maj_cur ] || [ $med_lat -gt $med_cur ]; then
+        # Téléchargement de la nouvelle archive
+        link="https://cdn.kernel.org/pub/linux/kernel/v$maj_lat.x/linux-$latest_ver.tar.xz"
+		cd /usr/src
+		echo "Downloading $latest_ver"
+		wget $link
+		tar -xvf linux-$latest_ver.tar.xz
+		cd linux-$latest_ver
+        rm /usr/src/linux
+        ln -s /usr/src/linux-$latest_ver /usr/src/linux 
+        latest_ver="$maj_lat.$med_lat.0"
+		cp ../config-$maj_cur.$med_cur .config
+		make oldconfig
+    elif [ $min_lat -gt $min_cur ]; then
+        # Téléchargement du patch demandé
+        delta=$(($min_lat-$min_cur))
+		for i in $(seq 1 1 $delta); do
+            new=$(($min_cur+$i))
+            if [ $new -eq 1 ]; then
+                link="https://cdn.kernel.org/pub/linux/kernel/v$maj_cur.x/patch-$maj_cur.$med_cur.$new.xz"
+                echo "Downloading patch-$maj_cur.$med_cur.$new.xz"
+                wget $link
+                unxz patch-$maj_cur.$med_cur.$new.xz
+                echo "Minor patching to $maj_cur.$med_cur.$new"
+                patch -p1 < patch-$maj_cur.$med_cur.$new
+            else
+                link="https://cdn.kernel.org/pub/linux/kernel/v$maj_cur.x/incr/patch-$maj_cur.$med_cur.$min_cur-$new.xz"
+                echo "Downloading patch-$maj_cur.$med_cur.$min_cur-$new.xz"
+                wget $link
+                unxz patch-$maj_cur.$med_cur.$min_cur-$new.xz
+                echo "Minor patching to $maj_cur.$med_cur.$new"
+                patch -p1 < patch-$maj_cur.$med_cur.$min_cur-$new
+            fi
+		done
+    else
+        echo "No update available $latest_ver == $current_ver"
+		exit
+    fi
+
+	# Building kernel
+	make -j5
+	make modules_install
+    echo "Building DKMS modules"
+	dkms install bbswitch/0.8 -k ${latest_ver}-nop-90
+    echo "Copying new kernel/initrd"
+	cryptsetup open /dev/sdb5 cryptboot
+	mount /dev/mapper/cryptboot /boot
+    mkinitcpio -k $latest_ver-nop-90 -g /boot/initrd4.img
+	rm /boot/vmlinuz.old
+	mv /boot/vmlinuz4 /boot/vmlinuz.old
+	cp arch/x86_64/boot/bzImage /boot/vmlinuz4
+	echo "Patching grub.cfg"
+	sed -i -e "s/$current_ver/$latest_ver/g" /boot/grub/grub.cfg
+	rm /boot/grub/grub2.cfg
+	cp /boot/grub/grub.cfg /boot/grub/grub2.cfg
 fi
-chars=$(echo ${#version})
-if [ $chars -eq 6 ]
-then 
-	ver=$(echo $version | cut -c6-6)
-	old_kernel=$(uname -r | cut -c1-6)
-elif [ $chars -eq 5 ]
-then
-	ver=$(echo $version | cut -c5-5)
-	old_kernel=$(uname -r | cut -c1-5)
-elif [ $chars -eq 4 ]
-then
-	ver=0
-	old_kernel=$(uname -r | cut -c1-4)
-else
-	ver=$(echo $version | cut -c6-6)
-	old_kernel=$(uname -r | cut -c1-6)
-fi
-if [ $ver -eq 1 ] || [ $ver -eq 0 ]
-then
-	wget https://www.kernel.org/pub/linux/kernel/v4.x/patch-$version.xz
-	patch_bz2="patch-$version"
-else
-	let "a=ver-1"
-	if [ $chars -eq 5 ] 
-	then
-		sup_ver=$(echo $version | cut -c1-3)
-	else
-		sup_ver=$(echo $version | cut -c1-4)
-	fi
-	patch_ver="$sup_ver.$a-$ver"
-	wget https://www.kernel.org/pub/linux/kernel/v4.x/incr/patch-$patch_ver.xz
-	patch_bz2="patch-$patch_ver"
-fi
-unxz $patch_bz2.xz
-patch -p1 < $patch_bz2
-make -j5
-make modules_install
-rm /boot/vmlinuz.old
-mv /boot/vmlinuz4 /boot/vmlinuz.old
-cp arch/x86_64/boot/bzImage /boot/vmlinuz4
-echo "Mise à jour du fichier grub.cfg"
-sed -i -e "s/$old_kernel/$version/g" /boot/grub/grub.cfg
-dkms install -m nvidia/370.28 -k ${version}-nop-90
-dkms install -m bbswitch/0.8 -k ${version}-nop-90
-rm /boot/grub/grub2.cfg
-cp /boot/grub/grub.cfg /boot/grub/grub2.cfg
-#if [ -z $2 ]
-#then
-#	echo "Compilation des modules supplémentaires"
-#	dkms autoinstall -k $version-arch
-#	catalyst_build_module $version-arch
-#	echo "Recompilation de l'initrd et création des liens pour les extra modules"
-#	rm /usr/lib/modules/extramodules-$sup_ver-arch/version
-#	echo "$version-arch" >> /usr/lib/modules/extramodules-$sup_ver-arch/version
-#	rm /usr/lib/modules/extramodules-$sup_ver-arch/fglrx.ko*
-#	ln -s /usr/lib/modules/extramodules-$sup_ver-arch/ /usr/lib/modules/$version-arch/extramodules
-#	mkinitcpio -k $version-arch -g /boot/initrd3.img
-#else
-#	sup_ver=$(uname -r | cut -c1-4)
-#	echo "Compilation manuelle des modules externes"
-#	rm /usr/lib/modules/extramodules-$sup_ver-arch/version
-#	echo "$version-arch" >> /usr/lib/modules/extramodules-$sup_ver-arch/version
-#	rm /usr/lib/modules/extramodules-$sup_ver-arch/fglrx.ko*
-#	ln -s /usr/lib/modules/extramodules-$sup_ver-arch/ /usr/lib/modules/$version-arch/extramodules
-#	catalyst_build_module $version-arch
-#	mkinitcpio -k $version-arch -g /boot/initrd3.img
-#fi
